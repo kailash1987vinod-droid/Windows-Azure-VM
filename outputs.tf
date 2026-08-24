@@ -1,6 +1,6 @@
 output "resource_group_name" {
   description = "Created resource group name."
-  value       = azurerm_resource_group.vm.name
+  value       = azurerm_resource_group.rg.name
 }
 
 output "vm_name" {
@@ -10,10 +10,10 @@ output "vm_name" {
 
 output "public_ip_address" {
   description = "Public IP address for RDP."
-  value       = azurerm_public_ip.vm.ip_address
+  value       = azurerm_public_ip.public_ip.ip_address
 }
 
 output "rdp_command" {
   description = "Command to connect to the Windows VM using Remote Desktop."
-  value       = "mstsc /v:${azurerm_public_ip.vm.ip_address}"
+  value       = "mstsc /v:${azurerm_public_ip.public_ip.ip_address}"
 }

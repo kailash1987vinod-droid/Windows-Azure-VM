@@ -40,7 +40,7 @@ variable "admin_password" {
 }
 
 variable "rdp_source_cidr" {
-  description = "CIDR allowed to connect to RDP, for example 203.0.113.10/32."
+  description = "CIDR allowed to connect to RDP. Use your current public IP with /32, for example 198.51.100.25/32."
   type        = string
 
   validation {
