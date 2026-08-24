@@ -1,14 +1,6 @@
 terraform {
   required_version = ">= 1.6.0"
 
-  cloud {
-    organization = "YOUR_TERRAFORM_CLOUD_ORGANIZATION"
-
-    workspaces {
-      name = "YOUR_TERRAFORM_CLOUD_WORKSPACE"
-    }
-  }
-
   required_providers {
     azurerm = {
       source  = "hashicorp/azurerm"
@@ -19,42 +11,48 @@ terraform {
 
 provider "azurerm" {
   features {}
+  # Azure credentials are read automatically from ARM_* environment variables.
 }
 
-resource "azurerm_resource_group" "vm" {
+# 1. Create Resource Group
+resource "azurerm_resource_group" "rg" {
   name     = var.resource_group_name
   location = var.location
 }
 
-resource "azurerm_virtual_network" "vm" {
+# 2. Create Virtual Network
+resource "azurerm_virtual_network" "vnet" {
   name                = "${var.vm_name}-vnet"
   address_space       = ["10.0.0.0/16"]
-  location            = azurerm_resource_group.vm.location
-  resource_group_name = azurerm_resource_group.vm.name
+  location            = azurerm_resource_group.rg.location
+  resource_group_name = azurerm_resource_group.rg.name
 }
 
-resource "azurerm_subnet" "vm" {
-  name                 = "${var.vm_name}-subnet"
-  resource_group_name  = azurerm_resource_group.vm.name
-  virtual_network_name = azurerm_virtual_network.vm.name
+# 3. Create Subnet
+resource "azurerm_subnet" "subnet" {
+  name                 = "internal"
+  resource_group_name  = azurerm_resource_group.rg.name
+  virtual_network_name = azurerm_virtual_network.vnet.name
   address_prefixes     = ["10.0.1.0/24"]
 }
 
-resource "azurerm_public_ip" "vm" {
+# 4. Create Public IP
+resource "azurerm_public_ip" "public_ip" {
   name                = "${var.vm_name}-public-ip"
-  location            = azurerm_resource_group.vm.location
-  resource_group_name = azurerm_resource_group.vm.name
+  resource_group_name = azurerm_resource_group.rg.name
+  location            = azurerm_resource_group.rg.location
   allocation_method   = "Static"
   sku                 = "Standard"
 }
 
-resource "azurerm_network_security_group" "vm" {
+# 5. Create Network Security Group with restricted RDP access
+resource "azurerm_network_security_group" "nsg" {
   name                = "${var.vm_name}-nsg"
-  location            = azurerm_resource_group.vm.location
-  resource_group_name = azurerm_resource_group.vm.name
+  location            = azurerm_resource_group.rg.location
+  resource_group_name = azurerm_resource_group.rg.name
 
   security_rule {
-    name                       = "allow-rdp-from-configured-ip"
+    name                       = "RDP"
     priority                   = 100
     direction                  = "Inbound"
     access                     = "Allow"
@@ -66,38 +64,41 @@ resource "azurerm_network_security_group" "vm" {
   }
 }
 
-resource "azurerm_network_interface" "vm" {
+# 6. Create Network Interface
+resource "azurerm_network_interface" "nic" {
   name                = "${var.vm_name}-nic"
-  location            = azurerm_resource_group.vm.location
-  resource_group_name = azurerm_resource_group.vm.name
+  location            = azurerm_resource_group.rg.location
+  resource_group_name = azurerm_resource_group.rg.name
 
   ip_configuration {
     name                          = "internal"
-    subnet_id                     = azurerm_subnet.vm.id
+    subnet_id                     = azurerm_subnet.subnet.id
     private_ip_address_allocation = "Dynamic"
-    public_ip_address_id          = azurerm_public_ip.vm.id
+    public_ip_address_id          = azurerm_public_ip.public_ip.id
   }
 }
 
-resource "azurerm_network_interface_security_group_association" "vm" {
-  network_interface_id      = azurerm_network_interface.vm.id
-  network_security_group_id = azurerm_network_security_group.vm.id
+# 7. Connect NSG to NIC
+resource "azurerm_network_interface_security_group_association" "nsg_association" {
+  network_interface_id      = azurerm_network_interface.nic.id
+  network_security_group_id = azurerm_network_security_group.nsg.id
 }
 
+# 8. Create Windows Virtual Machine
 resource "azurerm_windows_virtual_machine" "vm" {
   name                = var.vm_name
   computer_name       = var.vm_name
-  resource_group_name = azurerm_resource_group.vm.name
-  location            = azurerm_resource_group.vm.location
+  resource_group_name = azurerm_resource_group.rg.name
+  location            = azurerm_resource_group.rg.location
   size                = var.vm_size
   admin_username      = var.admin_username
   admin_password      = var.admin_password
+
   network_interface_ids = [
-    azurerm_network_interface.vm.id
+    azurerm_network_interface.nic.id,
   ]
 
   os_disk {
-    name                 = "${var.vm_name}-os-disk"
     caching              = "ReadWrite"
     storage_account_type = "Standard_LRS"
   }
@@ -109,3 +110,4 @@ resource "azurerm_windows_virtual_machine" "vm" {
     version   = "latest"
   }
 }
+
